@@ -23,9 +23,7 @@ import pdb
 import wandb
 wandb.login()
 
-# import nonechucks as nc
-
-PATH = 'models/resnet18/'
+PATH = 'models/resnet50/'
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
@@ -70,7 +68,6 @@ def main():
     global args, best_prec1
     args = parser.parse_args()
     print(args)
-    print("try except in /nethome/mummettuguli3/anaconda2/envs/my_basic_env_3/lib/python3.6/site-packages/torchvision/datasets/folder.py")
     wandb.init(project="places365_"+args.arch.lower(), config=args)
     # create model
     print("=> creating model '{}'".format(args.arch))
@@ -106,52 +103,26 @@ def main():
     valdir = os.path.join(args.data, 'val')
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-    
-    train_dataset = datasets.ImageFolder(traindir, transforms.Compose([
+
+    train_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(traindir, transforms.Compose([
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
-        ]))
-    # train_dataset = nc.SafeDataset(train_dataset)
-    
-    val_dataset = datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Scale(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-    # val_dataset = nc.SafeDataset(val_dataset)
-
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
+        ])),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(
-        val_dataset,
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Scale(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ])),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
-
-    # train_loader = torch.utils.data.DataLoader(
-    #     datasets.ImageFolder(traindir, transforms.Compose([
-    #         transforms.RandomSizedCrop(224),
-    #         transforms.RandomHorizontalFlip(),
-    #         transforms.ToTensor(),
-    #         normalize,
-    #     ])),
-    #     batch_size=args.batch_size, shuffle=True,
-    #     num_workers=args.workers, pin_memory=True)
-
-    # val_loader = torch.utils.data.DataLoader(
-    #     datasets.ImageFolder(valdir, transforms.Compose([
-    #         transforms.Scale(256),
-    #         transforms.CenterCrop(224),
-    #         transforms.ToTensor(),
-    #         normalize,
-    #     ])),
-    #     batch_size=args.batch_size, shuffle=False,
-    #     num_workers=args.workers, pin_memory=True)
 
     # define loss function (criterion) and pptimizer
     criterion = nn.CrossEntropyLoss().cuda()
@@ -249,7 +220,7 @@ def validate(val_loader, model, criterion):
 
     # switch to evaluate mode
     model.eval()
-    
+
     with torch.no_grad():
         end = time.time()
         for i, (input_var, target_var) in enumerate(val_loader):

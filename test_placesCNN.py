@@ -20,8 +20,13 @@ import torchvision.models as models
 
 import wideresnet
 import pdb
-import wandb
-wandb.login()
+# import wandb
+# wandb.login()
+is_first = True
+pred_stack=[]
+target_stack=[]
+correct_predicted_labels = torch.zeros(365,dtype=torch.float64)
+total_labels = torch.zeros(365,dtype=torch.float64)
 
 # import nonechucks as nc
 
@@ -71,7 +76,7 @@ def main():
     args = parser.parse_args()
     print(args)
     print("try except in /nethome/mummettuguli3/anaconda2/envs/my_basic_env_3/lib/python3.6/site-packages/torchvision/datasets/folder.py")
-    wandb.init(project="places365_"+args.arch.lower(), config=args)
+    # wandb.init(project="places365_"+args.arch.lower(), config=args)
     # create model
     print("=> creating model '{}'".format(args.arch))
     if args.arch.lower().startswith('wideresnet'):
@@ -91,11 +96,12 @@ def main():
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
+            # args.start_epoch = checkpoint['epoch']
+            # best_prec1 = checkpoint['best_prec1']
+            # model.load_state_dict(checkpoint['state_dict'])
+            model.load_state_dict(checkpoint)
+            # print("=> loaded checkpoint '{}' (epoch {})"
+            #       .format(args.resume, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
@@ -219,7 +225,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         losses.update(loss.data.item(), input_var.size(0))
         top1.update(prec1.item(), input_var.size(0))
         top5.update(prec5.item(), input_var.size(0))
-        wandb.log({'loss': loss.data.item(), 'top1': prec1.item(), 'top5':prec5.item()})
+        # wandb.log({'loss': loss.data.item(), 'top1': prec1.item(), 'top5':prec5.item()})
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -261,14 +267,15 @@ def validate(val_loader, model, criterion):
             output = model(input_var)
             loss = criterion(output, target_var)
 
+            accuracy(output.data, target_var, topk=(1, 5))
             # measure accuracy and record loss
-            prec1, prec5 = accuracy(output.data, target_var, topk=(1, 5))
-            # losses.update(loss.data[0], input.size(0))
-            # top1.update(prec1[0], input.size(0))
-            # top5.update(prec5[0], input.size(0))
-            losses.update(loss.data.item(), input_var.size(0))
-            top1.update(prec1.item(), input_var.size(0))
-            top5.update(prec5.item(), input_var.size(0))
+            # prec1, prec5 = accuracy(output.data, target_var, topk=(1, 5))
+            # # losses.update(loss.data[0], input.size(0))
+            # # top1.update(prec1[0], input.size(0))
+            # # top5.update(prec5[0], input.size(0))
+            # losses.update(loss.data.item(), input_var.size(0))
+            # top1.update(prec1.item(), input_var.size(0))
+            # top5.update(prec5.item(), input_var.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -286,7 +293,33 @@ def validate(val_loader, model, criterion):
         print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f}'
             .format(top1=top1, top5=top5))
 
-    return top1.avg
+    # return top1.avg
+    correct = pred_stack.eq(target_stack)
+    # print("correct shape:",correct.shape)
+    res = []
+    topk=(1, 5)
+    for k in topk:
+        # correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+
+        # torch.bincount(target).cuda(args_.gpu, non_blocking=True) 
+        for i in range(365):
+            indices_of_occurance_of_i = target_stack[:k]==i
+            # if k==1:
+            #     indices_of_occurance_of_i = indices_of_occurance_of_i.squeeze()
+            # num_occurance_of_i = torch.sum(indices_of_occurance_of_i).cuda(args_.gpu, non_blocking=True)
+            num_occurance_of_i = torch.sum(indices_of_occurance_of_i)
+            
+            correct_k = correct[:k].contiguous()
+            if k==1:
+                indices_of_occurance_of_i = indices_of_occurance_of_i.squeeze()
+                correct_k = correct_k.view(-1)
+            correct_predicted_labels[i] += correct_k[indices_of_occurance_of_i].float().sum(0, keepdim=True).item()
+            total_labels[i] += num_occurance_of_i
+        
+        per_class_accuracy = correct_predicted_labels/total_labels
+        # print('per_class_top'+str(k)+'_accuracy_epoch'+args.resume.split("_")[3]+":",per_class_accuracy)
+        torch.save(per_class_accuracy, 'models/resnet18/accuracy/per_class_top'+str(k)+'_accuracy_epoch'+args.resume.split("_")[3])
+        # pdb.set_trace()
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -322,19 +355,36 @@ def adjust_learning_rate(optimizer, epoch):
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
+    global is_first
+    global pred_stack
+    global target_stack
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
 
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        
+        target = target.cpu()
+        pred = pred.cpu()
 
-    res = []
-    for k in topk:
-        # correct_k = correct[:k].view(-1).float().sum(0)
-        correct_k = correct[:k].contiguous().view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
+        target_expanded = target.view(1, -1).expand_as(pred)
+        if is_first:
+            pred_stack = pred
+            target_stack = target_expanded
+            is_first = False
+        else:
+            pred_stack = torch.hstack((pred_stack,pred))
+            target_stack = torch.hstack((target_stack,target_expanded))
+        
+        # correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        # res = []
+        # for k in topk:
+        #     # correct_k = correct[:k].view(-1).float().sum(0)
+        #     correct_k = correct[:k].contiguous().view(-1).float().sum(0)
+        #     res.append(correct_k.mul_(100.0 / batch_size))
+        # return res
 
 
 if __name__ == '__main__':
