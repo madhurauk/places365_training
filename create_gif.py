@@ -36,7 +36,7 @@ parser = argparse.ArgumentParser(description='create GIF of gradcam maps')
 # parser.add_argument('--resume', default='', type=str, metavar='PATH',
 #                     help='path to latest checkpoint (default: none)')
 parser.add_argument('--output_dir', default='', type=str, metavar='PATH',
-                    help='path until folder name inside output dir for this specific run (default: none)')
+                    help='path until folder name (i.e jobid) inside output dir for this specific run (default: none)')
 # parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 #                     help='evaluate model on validation set')
 # parser.add_argument('--pretrained', dest='pretrained', action='store_true',

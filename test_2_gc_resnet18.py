@@ -84,7 +84,7 @@ best_prec1 = 0
 def main():
     global args, best_prec1
     args = parser.parse_args()
-    print(args)
+    print("args:",args)
     print("try except in /nethome/mummettuguli3/anaconda2/envs/my_basic_env_3/lib/python3.6/site-packages/torchvision/datasets/folder.py")
     # wandb.init(project="places365_"+args.arch.lower(), config=args)
     # create model
